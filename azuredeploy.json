@@ -1,0 +1,124 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_ZRS",
+        "Premium_LRS"
+      ],
+      "metadata": {
+        "description": "Storage Account type for replication. Default: Standard LRS."
+      }
+    },
+    "environmentType": {
+      "type": "string",
+      "defaultValue": "dev",
+      "allowedValues": [
+        "dev",
+        "tst",
+        "qa",
+        "prd"
+      ],
+      "metadata": {
+        "description": "Describe the selected environment for the deployed resource. Default: dev."
+      }
+    },
+    "count": {
+      "type": "int",
+      "defaultValue": "1",
+      "metadata": {
+        "description": "Total number of storage account required, default is 1."
+      }
+    },
+    "storageAccessTier": {
+      "type": "string",
+      "defaultValue": "Hot",
+      "metadata": {
+        "description": "Describe the selected access tier (Hot or Cool) for the storage. Default: hot."
+      }
+    },
+    "locationAffix": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 4,
+      "metadata": {
+        "description": "Provide the location affix."
+      }
+    },
+    "workloadName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 5,
+      "metadata": {
+        "description": "Describe the workload of the initiative."
+      }
+    }
+  },
+  "variables": {
+    "storageAccountName": {
+      "copy": [
+        {
+          "name": "storageAccounts",
+          "count": "[parameters('count')]",
+          "input": {
+            "name": "[concat(uniqueString(concat(tolower(parameters('workloadName')),parameters('environmentType'),parameters('locationAffix'))),copyIndex('storageAccounts', 100),'bhp')]"
+          }
+        }
+      ]
+    }
+  },
+  "resources": [
+    {
+      "apiVersion": "2017-10-01",
+      "type": "Microsoft.Storage/storageAccounts",
+      "kind": "BlobStorage",
+      "location": "[resourceGroup().location]",
+      "name": "[variables('storageAccountName')['storageAccounts'][copyIndex()].name]",
+      "properties": {
+        "accessTier": "[parameters('storageAccessTier')]",
+        //to dos: Encryption Object
+        "supportsHttpsTrafficOnly": true
+
+      },
+      "resources": [
+        {
+          "condition": "[equals(parameters('environmentType'),'prd')]",
+          "name": "[concat(variables('storageAccountName')['storageAccounts'][copyIndex()].name,'/Microsoft.Authorization/PrdLock')]",
+          "type": "Microsoft.Storage/storageAccounts/providers/locks",
+          "apiVersion": "2015-01-01",
+          "properties": {
+            "level": "CanNotDelete"
+          },
+          "dependsOn": [
+            "[variables('storageAccountName')['storageAccounts'][copyIndex()].name]"
+          ]
+        }
+      ],
+      "sku": {
+        "name": "[parameters('storageAccountType')]"
+      },
+      "tags": {
+        //"owner": "[parameters('ownerName')]",
+        //"businessUnit": "[parameters('businessUnit')]",
+        //"costCentre": "[parameters('costCenter')]",
+        "environment": "[parameters('environmentType')]",
+        "displayName": "BlobStorage"
+      },
+      "copy": {
+        "name": "storagecopy",
+        "count": "[parameters('count')]"
+      }
+    }
+  ],
+  "outputs": {
+    "storageAccountName": {
+      "value": "[variables('storageAccountName')['storageAccounts']]",
+      "type": "array"
+    }
+  }
+}
